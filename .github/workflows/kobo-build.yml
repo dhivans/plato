@@ -1,4 +1,4 @@
-name: Build Plato for Kobo (self-package)
+name: Build Plato for Kobo (Nickel)
 
 on:
   push:
@@ -24,17 +24,14 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      # Grab the Kobo cross toolchain & third-party bits Plato expects
-      - name: Prepare Kobo toolchain (thirdparty)
+      - name: Prepare Nickel toolchain
         run: |
-          # This downloads/caches toolchains & 3rdparty libs used by build.sh
-          bash ./download.sh kobo || true
+          # Plato’s helper script fetches the cross toolchain/3rdparty bits
+          bash ./download.sh nickel || true
 
-      # Build Plato for Kobo in release mode
-      - name: Build for Kobo (release)
-        run: bash ./build.sh kobo release
+      - name: Build for Nickel (release)
+        run: bash ./build.sh nickel release
 
-      # Package .adds/plato/ by copying runtime assets + the built binary
       - name: Package .adds/plato
         shell: bash
         run: |
@@ -42,26 +39,23 @@ jobs:
           OUT=dist/.adds/plato
           rm -rf dist && mkdir -p "$OUT"
 
-          # Runtime assets from repo
+          # Copy runtime assets
           cp -a css icons fonts keyboard-layouts "$OUT"/
-          # Launcher & helper scripts if present
+          # Launcher script if present
           if [ -f plato.sh ]; then cp plato.sh "$OUT"/; fi
           if [ -d scripts ]; then cp -a scripts "$OUT"/; fi
 
-          # Find the built Kobo binary and drop it in place
-          # (look for a 'plato' binary under something like build/*kobo*/release/)
-          BIN="$(find . -type f -name plato -path '*kobo*release*' | head -n1)"
+          # Find the Nickel release binary
+          BIN="$(find . -type f -name plato -path '*nickel*release*' | head -n1)"
           if [ -z "$BIN" ]; then
-            echo "Could not locate built Kobo binary named 'plato' under *kobo*/release" >&2
+            echo "Could not locate Nickel release binary named 'plato'." >&2
             find . -type f -name plato | sed 's/^/FOUND: /' || true
             exit 1
           fi
           install -m 0755 "$BIN" "$OUT/plato"
 
-          # Zip up in the expected layout (drop-in to device root)
+          # Zip so it can be dropped on the device root
           (cd dist && zip -r plato-kobo.zip .adds)
-
-          # Show contents for sanity
           unzip -l dist/plato-kobo.zip
 
       - name: Upload artifact
