@@ -1,4 +1,4 @@
-name: Build Plato for Kobo (Nickel)
+name: Build Plato for Kobo (arm-unknown-linux-gnueabihf)
 
 on:
   push:
@@ -13,25 +13,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install deps
+      - name: Install system deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git cmake pkg-config \
-              wget unzip zip tar xz-utils \
-              libfreetype6-dev zlib1g-dev libzip-dev \
-              libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-mixer-dev
+          sudo apt-get install -y \
+            build-essential git cmake pkg-config \
+            wget unzip zip tar xz-utils \
+            libfreetype6-dev zlib1g-dev libzip-dev \
+            libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-mixer-dev \
+            gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf
 
-      - name: Install Rust
+      - name: Install Rust + target
         uses: dtolnay/rust-toolchain@stable
+      - run: rustup target add arm-unknown-linux-gnueabihf
 
-      - name: Prepare Nickel toolchain
-        run: |
-          # Plato’s helper script fetches the cross toolchain/3rdparty bits
-          bash ./download.sh nickel || true
+      # Your build.sh downloads prebuilt libs & builds everything for Kobo
+      - name: Build (uses default 'fast' method)
+        run: bash ./build.sh
 
-      - name: Build for Nickel (release)
-        run: bash ./build.sh nickel release
-
+      # Package the app exactly how the Kobo expects it under .adds/plato/
       - name: Package .adds/plato
         shell: bash
         run: |
@@ -39,22 +39,24 @@ jobs:
           OUT=dist/.adds/plato
           rm -rf dist && mkdir -p "$OUT"
 
-          # Copy runtime assets
+          # Runtime assets
           cp -a css icons fonts keyboard-layouts "$OUT"/
-          # Launcher script if present
+
+          # Launcher / scripts if present
           if [ -f plato.sh ]; then cp plato.sh "$OUT"/; fi
           if [ -d scripts ]; then cp -a scripts "$OUT"/; fi
 
-          # Find the Nickel release binary
-          BIN="$(find . -type f -name plato -path '*nickel*release*' | head -n1)"
-          if [ -z "$BIN" ]; then
-            echo "Could not locate Nickel release binary named 'plato'." >&2
-            find . -type f -name plato | sed 's/^/FOUND: /' || true
-            exit 1
+          # Shared libs that build.sh downloaded/linked against
+          if [ -d libs ]; then cp -a libs "$OUT"/; fi
+
+          # Built Kobo binary
+          BIN="target/arm-unknown-linux-gnueabihf/release/plato"
+          if [ ! -f "$BIN" ]; then
+            echo "Binary not found at $BIN"; ls -al target || true; exit 1
           fi
           install -m 0755 "$BIN" "$OUT/plato"
 
-          # Zip so it can be dropped on the device root
+          # Create drop-in zip for device root
           (cd dist && zip -r plato-kobo.zip .adds)
           unzip -l dist/plato-kobo.zip
 
