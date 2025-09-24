@@ -1,5 +1,4 @@
-mod textview;
-use textview::TextView;
+use crate::textview::TextView;
 use std::ffi::OsStr; // add this for extension checks
 
 use std::fs::File;
