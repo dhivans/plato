@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,11 +27,20 @@ jobs:
       - name: Download Kobo toolchain
         run: bash ./download.sh kobo
 
+      # Build the binaries (release profile) for Kobo
       - name: Build Plato for Kobo
         run: bash ./build.sh kobo release
 
+      # Create the big dist zip that contains 'kobo/' inside
+      - name: Create dist zip (adds kobo/ folder)
+        run: bash ./dist.sh kobo
+
+      # Extract kobo/ from the dist zip into dist/plato-kobo.zip
       - name: Bundle Kobo ZIP
         run: bash ./bundle.sh kobo
+
+      - name: Show dist contents
+        run: ls -al dist && unzip -l dist/*.zip || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
