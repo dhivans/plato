@@ -1,61 +1,88 @@
-// crates/plato/src/textview.rs
-use once_cell::sync::Lazy;
-use regex::Regex;
-use std::{fs, io, path::{Path, PathBuf}};
+use std::path::Path;
+use std::sync::mpsc::Sender;
+use std::collections::VecDeque;
+use std::fs;
 
-static CHECKBOX_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^(\s*[-*]\s+\[)( |x)(\])").unwrap());
-
-fn save_atomic(path: &Path, txt: &str) -> io::Result<()> {
-    let tmp = path.with_extension("tmp");
-    fs::write(&tmp, txt)?;
-    fs::rename(tmp, path)?;
-    Ok(())
-}
-
-fn toggle_checkbox(line: &mut String) -> bool {
-    if let Some(cap) = CHECKBOX_RE.captures(line) {
-        *line = if &cap[2] == " " {
-            CHECKBOX_RE.replace(line, "${1}x${3}").into_owned()
-        } else {
-            CHECKBOX_RE.replace(line, "${1} ${3}").into_owned()
-        };
-        true
-    } else {
-        false
-    }
-}
+use plato_core::anyhow::Error;
+use plato_core::geom::Rectangle;
+use plato_core::framebuffer::{Framebuffer, UpdateMode};
+use plato_core::context::Context;
+use plato_core::font::Fonts;
+use plato_core::view::{View, Event, Hub, Bus, RenderQueue, RenderData, ID_FEEDER, Id};
 
 pub struct TextView {
-    path: PathBuf,
-    lines: Vec<String>,
+    id: Id,
+    rect: Rectangle,
+    text: String,
+    children: Vec<Box<dyn View>>, // most views keep this
 }
 
 impl TextView {
-    pub fn open(path: &Path) -> io::Result<Self> {
-        let txt = fs::read_to_string(path)?;
-        let mut lines: Vec<String> = txt.lines().map(|s| s.to_owned()).collect();
-        if txt.ends_with('\n') { lines.push(String::new()); }
-        Ok(Self { path: path.to_path_buf(), lines })
-    }
+    pub fn new(
+        rect: Rectangle,
+        path: &Path,
+        _hub: &Sender<Event>,
+        _rq: &mut RenderQueue,
+        _ctx: &mut Context,
+    ) -> Result<Self, Error> {
+        let text = fs::read_to_string(path).unwrap_or_else(|_| "".into());
 
-    /// Call this from your tap handler after mapping y→line index.
-    pub fn toggle_at_line(&mut self, line_idx: usize) -> io::Result<bool> {
-        if let Some(line) = self.lines.get_mut(line_idx) {
-            if toggle_checkbox(line) {
-                let contents = self.lines.join("\n");
-                save_atomic(&self.path, &contents)?;
-                // TODO: trigger redraw in your scene system
-                return Ok(true);
+        Ok(Self {
+            id: ID_FEEDER.next(),
+            rect,
+            text,
+            children: Vec::new(),
+        })
+    }
+}
+
+impl View for TextView {
+    fn handle_event(
+        &mut self,
+        evt: &Event,
+        _hub: &Hub,
+        _bus: &mut Bus,
+        rq: &mut RenderQueue,
+        _ctx: &mut Context,
+    ) -> bool {
+        match evt {
+            Event::Back => {
+                // If Back is pressed, close the view
+                return false;
             }
+            Event::Keyboard(k) => {
+                // TODO: handle keyboard events here
+                println!("Keyboard event: {:?}", k);
+            }
+            _ => {}
         }
-        Ok(false)
+        rq.add(RenderData::new(self.id, self.rect, UpdateMode::Gui));
+        true
     }
 
-    // TODO: integrate with your UI toolkit
-    pub fn draw(&self) {
-        // For first test, just no-op or log.
-        // Later, render with the same text drawing utilities used elsewhere.
-        // e.g., log::info!("Drawing {} lines", self.lines.len());
+    fn render(&self, fb: &mut dyn Framebuffer, _rect: Rectangle, fonts: &mut Fonts) {
+        // TODO: actually draw text on screen
+        // For now, nothing is rendered
+        let _ = (fb, fonts);
+    }
+
+    fn rect(&self) -> &Rectangle {
+        &self.rect
+    }
+
+    fn rect_mut(&mut self) -> &mut Rectangle {
+        &mut self.rect
+    }
+
+    fn children(&self) -> &Vec<Box<dyn View>> {
+        &self.children
+    }
+
+    fn children_mut(&mut self) -> &mut Vec<Box<dyn View>> {
+        &mut self.children
+    }
+
+    fn id(&self) -> Id {
+        self.id
     }
 }
