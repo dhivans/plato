@@ -1,3 +1,7 @@
+mod textview;
+use textview::TextView;
+use std::ffi::OsStr; // add this for extension checks
+
 use std::fs::File;
 use std::env;
 use std::thread;
@@ -733,6 +737,58 @@ pub fn run() -> Result<(), Error> {
                     context.fb.set_dithered(context.settings.reader.dithered_kinds.contains(&info.file.kind));
                 }
                 let path = info.file.path.clone();
+                // === BEGIN: route .txt/.md to our editor ===
+                let is_texty = path
+                    .extension()
+                    .and_then(OsStr::to_str)
+                    .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "txt" | "md" | "markdown"))
+                    .unwrap_or(false);
+
+                if is_texty {
+                    // Construct your TextView. Make its constructor mirror Reader::new’s shape if possible.
+                    // If your TextView::new doesn’t need rq/fonts yet, simplify accordingly.
+                    match TextView::new(context.fb.rect(), path.as_path(), &tx, &mut rq, &mut context) {
+                        Ok(tv) => {
+                            let mut next_view: Box<dyn View> = Box::new(tv);
+
+                            // This is exactly what the Reader branch does: keep the UI behavior identical.
+                            transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
+                            history.push(HistoryItem {
+                                view,
+                                rotation,
+                                monochrome: context.fb.monochrome(),
+                                dithered,
+                            });
+                            view = next_view;
+
+                            // Short-circuit the Reader path; we’re done handling Event::Open.
+                            continue;
+                        }
+                        Err(e) => {
+                            // Fall back to the “invalid/open failed” path Plato already has
+                            // (same code used later in this arm when Reader::new fails):
+                            if context.display.rotation != rotation {
+                                if let Ok(dims) = context.fb.set_rotation(rotation) {
+                                    raw_sender.send(display_rotate_event(rotation)).ok();
+                                    context.display.rotation = rotation;
+                                    context.display.dims = dims;
+                                }
+                            }
+                            context.fb.set_dithered(dithered);
+                            handle_event(
+                                view.as_mut(),
+                                &Event::Invalid(path),
+                                &tx,
+                                &mut bus,
+                                &mut rq,
+                                &mut context,
+                            );
+                            continue;
+                        }
+                    }
+                }
+                // === END: route .txt/.md to our editor ===
+
                 if let Some(r) = Reader::new(context.fb.rect(), *info, &tx, &mut context) {
                     let mut next_view = Box::new(r) as Box<dyn View>;
                     transfer_notifications(view.as_mut(), next_view.as_mut(), &mut rq, &mut context);
