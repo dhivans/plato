@@ -746,7 +746,7 @@ pub fn run() -> Result<(), Error> {
                 if is_texty {
                     // Construct your TextView. Make its constructor mirror Reader::new’s shape if possible.
                     // If your TextView::new doesn’t need rq/fonts yet, simplify accordingly.
-                    match TextView::open(path.as_path()) {
+                    match TextView::new(context.fb.rect(), path.as_path(), &tx, &mut rq, &mut context) {
                         Ok(tv) => {
                             let mut next_view: Box<dyn View> = Box::new(tv);
 
