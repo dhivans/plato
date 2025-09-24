@@ -7,37 +7,33 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install build deps
+      - name: Install deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkg-config \
+          sudo apt-get install -y build-essential git cmake pkg-config \
               wget unzip tar xz-utils \
               libfreetype6-dev zlib1g-dev libzip-dev \
               libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev libsdl2-mixer-dev
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
-      # Plato provides helper scripts; we'll use them for Kobo cross build
-      - name: Download toolchains
+      - name: Download Kobo toolchain
         run: bash ./download.sh kobo
 
-      - name: Build (release) for Kobo
+      - name: Build Plato for Kobo
         run: bash ./build.sh kobo release
 
-      - name: Bundle ZIP
+      - name: Bundle Kobo ZIP
         run: bash ./bundle.sh kobo
 
-      - name: Upload ZIP artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: plato-kobo-zip
+          name: plato-kobo
           path: dist/plato-kobo.zip
